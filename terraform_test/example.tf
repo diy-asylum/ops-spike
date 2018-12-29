@@ -58,23 +58,22 @@ resource "aws_ecs_task_definition" "diyasylum-fe" {
   depends_on               = ["aws_iam_role_policy.ecs_execution_policy"]
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = 1024
+  memory                   = 4096
   execution_role_arn       = "${aws_iam_role.ecs_execution_role.arn}"
 
   container_definitions = <<DEFINITION
 [
   {
     "essential": true,
-    "image": "${data.aws_ecr_repository.diy-ecr-fe.repository_url}/frontend:latest",
+    "image": "${data.aws_ecr_repository.diy-ecr-fe.repository_url}:latest",
     "name": "diyasylum-fe",
     "portMappings": [
                 {
                     "containerPort": 3000,
                     "hostPort": 3000
                 }
-            ],
-    "entryPoint": ["npm", "start"]
+            ]
   }
 ]
 DEFINITION
@@ -99,6 +98,20 @@ resource "aws_security_group" "allow_all" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 resource "aws_subnet" "subnet_1" {
@@ -107,18 +120,38 @@ resource "aws_subnet" "subnet_1" {
   availability_zone = "us-east-1a"
 }
 
-output "subnet_1_zone" {
-  value = "${aws_subnet.subnet_1.availability_zone}"
-}
-
 resource "aws_subnet" "subnet_2" {
   vpc_id            = "${aws_security_group.allow_all.vpc_id}"
   cidr_block        = "10.0.0.128/25"
   availability_zone = "us-east-1b"
 }
 
-output "subnet_2_zone" {
-  value = "${aws_subnet.subnet_2.availability_zone}"
+resource "aws_route_table" "nat_route_1" {
+  vpc_id = "${aws_vpc.main.id}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = "${aws_internet_gateway.gw.id}"
+  }
+}
+
+resource "aws_route_table" "nat_route_2" {
+  vpc_id = "${aws_vpc.main.id}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = "${aws_internet_gateway.gw.id}"
+  }
+}
+
+resource "aws_route_table_association" "subnet_1_association" {
+  subnet_id      = "${aws_subnet.subnet_1.id}"
+  route_table_id = "${aws_route_table.nat_route_1.id}"
+}
+
+resource "aws_route_table_association" "subnet_2_association" {
+  subnet_id      = "${aws_subnet.subnet_2.id}"
+  route_table_id = "${aws_route_table.nat_route_2.id}"
 }
 
 resource "aws_lb_target_group" "ecs-target-group" {
