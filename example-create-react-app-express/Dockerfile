@@ -13,5 +13,7 @@ RUN npm install --only=production
 # Bundle app source
 COPY . .
 
+ENV BE_HOST "http://localhost:12345"
+
 EXPOSE 3000
 CMD [ "node", "server.js" ]
